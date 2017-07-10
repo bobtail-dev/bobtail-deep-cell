@@ -1,6 +1,6 @@
 {
   "name": "bobtail-json-cell",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "",
   "main": "dist/main.js",
   "homepage": "https://github.com/bobtail-dev/bobtail-deep-cell#readme",
@@ -39,14 +39,12 @@
     "uglify-es": "^3.0.23"
   },
   "dependencies": {
+    "bobtail-rx": ">=2.1.1",
     "jsondiffpatch": "^0.2.4",
     "lodash.get": "^4.4.2",
     "lodash.hasin": "^4.5.2",
     "lodash.set": "^4.3.2",
     "lodash.unset": "^4.5.2",
     "underscore": "^1.8.3"
-  },
-  "peerDependencies": {
-    "bobtail-rx": "^2.1.1"
   }
 }
