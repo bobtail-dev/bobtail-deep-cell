@@ -204,26 +204,20 @@
     }
 
     _createClass(JsonCell, [{
-      key: 'del',
-      value: function del(obj, prop) {
-        return this.__proto__.constructor.stDel(obj, prop);
-      }
-    }, {
-      key: 'set',
-      value: function set(obj, prop) {
-        return this.__proto__.constructor.stSet(obj, prop);
-      }
-    }, {
       key: 'update',
       value: function update(newVal) {
-        var diff = jsondiffpatch.diff(this.data, newVal);
-        jsondiffpatch.patch(this.data, diff);
-        return true;
+        var _this2 = this;
+
+        rx.snap(function () {
+          var diff = jsondiffpatch.diff(_this2.data, newVal);
+          jsondiffpatch.patch(_this2.data, diff);
+          return true;
+        });
       }
     }, {
       key: 'conf',
       value: function conf(basePath) {
-        var _this2 = this;
+        var _this3 = this;
 
         var getPath = function getPath() {
           for (var _len = arguments.length, props = Array(_len), _key = 0; _key < _len; _key++) {
@@ -235,44 +229,46 @@
 
         return {
           deleteProperty: function deleteProperty(obj, prop) {
-            var path = getPath(prop);
-            if (recorder.stack.length > 0) {
-              // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-              // bind is extremely likely to lead to infinite loops.
-              console.warn('Warning: deleting nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-              _this2.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: _this2._base });
-            }
-            recorder.mutating(function () {
-              var old = obj[prop];
-              var diff = prefixDiff(basePath, [_defineProperty({}, prop, old), 0, 0]);
-              if (prop in obj) {
-                _this2.del(obj, prop);
-                _this2.onChange.pub(diff);
+            return rx.snap(function () {
+              var path = getPath(prop);
+              if (recorder.stack.length > 0) {
+                // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+                // bind is extremely likely to lead to infinite loops.
+                console.warn('Warning: deleting nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
+                _this3.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: _this3._base });
               }
+              recorder.mutating(function () {
+                var old = obj[prop];
+                var diff = prefixDiff(basePath, [_defineProperty({}, prop, old), 0, 0]);
+                if (prop in obj) {
+                  delete obj[prop];
+                  _this3.onChange.pub(diff);
+                }
+              });
+              return true;
             });
-            return true;
           },
           set: function set(obj, prop, val) {
-            var path = getPath(prop);
-            if (recorder.stack.length > 0) {
-              // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-              // bind is extremely likely to lead to infinite loops.
-              console.warn('Warning: updating nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-              _this2.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: _this2._base });
-            }
-            recorder.mutating(function () {
-              var old = rx.snap(function () {
-                return obj[prop];
-              });
-              var diff = jsondiffpatch.diff(_defineProperty({}, prop, old), _defineProperty({}, prop, val));
-              if (diff) {
-                rx.snap(function () {
-                  return jsondiffpatch.patch(obj, diff);
-                });
-                _this2.onChange.pub(prefixDiff(basePath, diff));
+            return rx.snap(function () {
+              var path = getPath(prop);
+              if (recorder.stack.length > 0) {
+                // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+                // bind is extremely likely to lead to infinite loops.
+                console.warn('Warning: updating nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
+                _this3.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: _this3._base });
               }
+              recorder.mutating(function () {
+                var old = rx.snap(function () {
+                  return obj[prop];
+                });
+                var diff = jsondiffpatch.diff(_defineProperty({}, prop, old), _defineProperty({}, prop, val));
+                if (diff) {
+                  jsondiffpatch.patch(obj, diff);
+                  _this3.onChange.pub(prefixDiff(basePath, diff));
+                }
+              });
+              return true;
             });
-            return true;
           },
           get: function get(obj, prop) {
             var val = obj[prop];
@@ -287,8 +283,8 @@
             var path = getPath(prop);
             if (prop === 'length' && _underscore2.default.isArray(obj)) {
               var oldVal = obj.length;
-              recorder.sub(_this2.onChange, function () {
-                var newVal = (0, _lodash2.default)(_this2._base, path);
+              recorder.sub(_this3.onChange, function () {
+                var newVal = (0, _lodash2.default)(_this3._base, path);
                 if (newVal !== oldVal) {
                   oldVal = newVal;
                   return true;
@@ -296,21 +292,21 @@
                 return false;
               });
             } else {
-              recorder.sub(_this2.onChange, function (patch) {
+              recorder.sub(_this3.onChange, function (patch) {
                 return patchHas(patch, path);
               });
             }
             // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
             if (_underscore2.default.isObject(val)) {
-              return new Proxy(val, _this2.conf(getPath(prop), obj));
+              return new Proxy(val, _this3.conf(getPath(prop), obj));
             }
             return val;
           },
           has: function has(obj, prop) {
             var path = getPath(prop);
             var had = prop in obj;
-            recorder.sub(_this2.onChange, function (patch) {
-              var has = (0, _lodash6.default)(_this2._base, path);
+            recorder.sub(_this3.onChange, function (patch) {
+              var has = (0, _lodash6.default)(_this3._base, path);
               if (had !== has) {
                 had = has;
                 return true;
@@ -320,7 +316,7 @@
             return had;
           },
           ownKeys: function ownKeys(obj) {
-            recorder.sub(_this2.onChange, function (patch) {
+            recorder.sub(_this3.onChange, function (patch) {
               var delta = (0, _lodash2.default)(patch, basePath);
               if (!delta) {
                 return false;
@@ -345,16 +341,6 @@
       set: function set(val) {
         this.update(val);
       }
-    }], [{
-      key: 'stDel',
-      value: function stDel(obj, prop) {
-        return delete obj[prop];
-      }
-    }, {
-      key: 'stSet',
-      value: function stSet(obj, prop, val) {
-        return obj[prop] = val;
-      }
     }]);
 
     return JsonCell;
@@ -365,9 +351,11 @@
   };
 
   var update = exports.update = function update(cell, newVal) {
-    var diff = jsondiffpatch.diff(cell, newVal);
-    jsondiffpatch.patch(cell, diff);
-    return true;
+    return rx.snap(function () {
+      var diff = jsondiffpatch.diff(cell, newVal);
+      jsondiffpatch.patch(cell, diff);
+      return true;
+    });
   };
 });
 
