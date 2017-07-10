@@ -1,4 +1,3 @@
-import nn from 'nevernull';
 import _ from 'underscore';
 import * as rx from 'bobtail-rx';
 import deepGet from 'lodash.get';

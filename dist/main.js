@@ -1,16 +1,16 @@
 (function (global, factory) {
   if (typeof define === "function" && define.amd) {
-    define('bobtail-deep-cell', ['exports', 'nevernull', 'underscore', 'bobtail-rx', 'lodash.get', 'lodash.set', 'lodash.hasin', 'jsondiffpatch'], factory);
+    define('bobtail-json-cell', ['exports', 'underscore', 'bobtail-rx', 'lodash.get', 'lodash.set', 'lodash.hasin', 'jsondiffpatch'], factory);
   } else if (typeof exports !== "undefined") {
-    factory(exports, require('nevernull'), require('underscore'), require('bobtail-rx'), require('lodash.get'), require('lodash.set'), require('lodash.hasin'), require('jsondiffpatch'));
+    factory(exports, require('underscore'), require('bobtail-rx'), require('lodash.get'), require('lodash.set'), require('lodash.hasin'), require('jsondiffpatch'));
   } else {
     var mod = {
       exports: {}
     };
-    factory(mod.exports, global.nevernull, global._, global.rx, global.lodashGet, global.lodashSet, global.lodashHasin, global.jsondiffpatch);
-    global.bobtailDeepCell = mod.exports;
+    factory(mod.exports, global._, global.rx, global.lodashGet, global.lodashSet, global.lodashHasin, global.jsondiffpatch);
+    global.bobtailJsonCell = mod.exports;
   }
-})(this, function (exports, _nevernull, _underscore, _bobtailRx, _lodash, _lodash3, _lodash5, _jsondiffpatch) {
+})(this, function (exports, _underscore, _bobtailRx, _lodash, _lodash3, _lodash5, _jsondiffpatch) {
   'use strict';
 
   Object.defineProperty(exports, "__esModule", {
@@ -18,8 +18,6 @@
   });
   exports.update = exports.jsonCell = exports.JsonCell = exports.UPDATE = exports.patchHas = undefined;
   exports.logReturn = logReturn;
-
-  var _nevernull2 = _interopRequireDefault(_nevernull);
 
   var _underscore2 = _interopRequireDefault(_underscore);
 
