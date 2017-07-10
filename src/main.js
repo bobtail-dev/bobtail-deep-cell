@@ -75,22 +75,19 @@ export class JsonCell extends rx.ObsBase {
   get data() {return this._data;}
   set data(val) {this.update(val);}
 
-  static stDel(obj, prop) {return delete obj[prop];}
-  del(obj, prop) {return this.__proto__.constructor.stDel(obj, prop);}
-  static stSet(obj, prop, val) {return obj[prop] = val;}
-  set(obj, prop) {return this.__proto__.constructor.stSet(obj, prop);}
-
   update (newVal) {
-    let diff = jsondiffpatch.diff(this.data, newVal);
-    jsondiffpatch.patch(this.data, diff);
-    return true;
+    rx.snap(() => {
+      let diff = jsondiffpatch.diff(this.data, newVal);
+      jsondiffpatch.patch(this.data, diff);
+      return true;
+    });
   }
 
   conf(basePath) {
     let getPath = (...props) => basePath.concat(props);
 
     return {
-      deleteProperty: (obj, prop) => {
+      deleteProperty: (obj, prop) => rx.snap(() => {
         let path = getPath(prop);
         if (recorder.stack.length > 0) {
           // the default mutation warning is nowhere near dire enough. mutating nested objects within a
@@ -104,13 +101,13 @@ export class JsonCell extends rx.ObsBase {
           let old = obj[prop];
           let diff = prefixDiff(basePath, [{[prop]: old}, 0, 0]);
           if(prop in obj) {
-            this.del(obj, prop);
+            delete obj[prop];
             this.onChange.pub(diff);
           }
         });
         return true;
-      },
-      set: (obj, prop, val) => {
+      }),
+      set: (obj, prop, val) => rx.snap(() => {
         let path = getPath(prop);
         if (recorder.stack.length > 0) {
           // the default mutation warning is nowhere near dire enough. mutating nested objects within a
@@ -124,12 +121,12 @@ export class JsonCell extends rx.ObsBase {
           let old = rx.snap(() => obj[prop]);
           let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
           if (diff) {
-            rx.snap(() => jsondiffpatch.patch(obj, diff));
+            jsondiffpatch.patch(obj, diff);
             this.onChange.pub(prefixDiff(basePath, diff));
           }
         });
         return true;
-      },
+      }),
       get: (obj, prop) => {
         let val = obj[prop];
         if (prop === '__proto__' || _.isFunction(val)) {
@@ -196,8 +193,8 @@ export class JsonCell extends rx.ObsBase {
 
 export let jsonCell = _base => new JsonCell(_base).data;
 
-export let update = (cell, newVal) => {
+export let update = (cell, newVal) => rx.snap(() => {
   let diff = jsondiffpatch.diff(cell, newVal);
   jsondiffpatch.patch(cell, diff);
   return true;
-};
+});
