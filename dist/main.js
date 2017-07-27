@@ -262,29 +262,33 @@
         return jsondiffpatch.diff({}, _this._base);
       });
       _this.onUnsafeMutation = _this._mkEv(function () {});
-      _this._oldUpdating = false;
-      _this._updating = true;
-      _this._data = new Proxy({ value: _this._base }, _this.conf([], null));
-      _this._updating = false;
-      _this._oldUpdating = false;
+      _this._updating(function () {
+        return _this._data = new Proxy({ value: _this._base }, _this.conf([], null));
+      });
       return _this;
     }
 
     _createClass(ObsJsonCell, [{
+      key: '_updating',
+      value: function _updating(f) {
+        this._oldUpdating = this._nowUpdating || false;
+        this._nowUpdating = true;
+        try {
+          rx.snap(f);
+        } finally {
+          this._nowUpdating = this._oldUpdating;
+        }
+        return true;
+      }
+    }, {
       key: '_update',
       value: function _update(newVal) {
         var _this2 = this;
 
-        this._oldUpdating = this._updating;
-        this._updating = true;
-        try {
-          rx.snap(function () {
-            var diff = jsondiffpatch.diff(_this2._data, { value: newVal });
-            jsondiffpatch.patch(_this2._data, diff);
-          });
-        } finally {
-          this._updating = this._oldUpdating;
-        }
+        this._updating(function () {
+          var diff = jsondiffpatch.diff(_this2._data, { value: newVal });
+          jsondiffpatch.patch(_this2._data, diff);
+        });
         return true;
       }
     }, {
@@ -505,14 +509,14 @@
     _createClass(DepJsonCell, [{
       key: 'setProperty',
       value: function setProperty(getPath, basePath, obj, prop, val) {
-        if (!this._updating) {
+        if (!this._nowUpdating) {
           throw new DepMutationError("Cannot mutate DepJsonCell!");
         } else return _get(DepJsonCell.prototype.__proto__ || Object.getPrototypeOf(DepJsonCell.prototype), 'setProperty', this).call(this, getPath, basePath, obj, prop, val);
       }
     }, {
       key: 'deleteProperty',
       value: function deleteProperty(getPath, basePath, obj, prop) {
-        if (!this._updating) {
+        if (!this._nowUpdating) {
           throw new DepMutationError("Cannot mutate DepJsonCell!");
         } else return _get(DepJsonCell.prototype.__proto__ || Object.getPrototypeOf(DepJsonCell.prototype), 'deleteProperty', this).call(this, getPath, basePath, obj, prop);
       }

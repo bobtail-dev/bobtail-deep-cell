@@ -69,25 +69,22 @@ export class ObsJsonCell extends rx.ObsBase {
     this._base = _base;
     this.onChange = this._mkEv(() => jsondiffpatch.diff({}, this._base));
     this.onUnsafeMutation = this._mkEv(() => {});
-    this._oldUpdating = false;
-    this._updating = true;
-    this._data = new Proxy({value: this._base}, this.conf([], null));
-    this._updating = false;
-    this._oldUpdating = false;
+    this._updating(() => this._data = new Proxy({value: this._base}, this.conf([], null)));
+  }
+
+  _updating (f) {
+    this._oldUpdating = this._nowUpdating || false;
+    this._nowUpdating = true;
+    try {rx.snap(f);}
+    finally {this._nowUpdating = this._oldUpdating;}
+    return true;
   }
 
   _update (newVal) {
-    this._oldUpdating = this._updating;
-    this._updating = true;
-    try {
-      rx.snap(() => {
-        let diff = jsondiffpatch.diff(this._data, {value: newVal});
-        jsondiffpatch.patch(this._data, diff);
-      });
-    }
-    finally {
-      this._updating = this._oldUpdating;
-    }
+    this._updating(() => {
+      let diff = jsondiffpatch.diff(this._data, {value: newVal});
+      jsondiffpatch.patch(this._data, diff);
+    });
     return true;
   }
 
@@ -223,7 +220,7 @@ export class ObsJsonCell extends rx.ObsBase {
 export class DepMutationError extends Error {
   // https://stackoverflow.com/questions/31089801/extending-error-in-javascript-with-es6-syntax
   constructor(...args) {
-    super(...args)
+    super(...args);
     Error.captureStackTrace(this, DepMutationError)
   }
 }
@@ -237,14 +234,14 @@ export class DepJsonCell extends ObsJsonCell {
   }
 
   setProperty(getPath, basePath, obj, prop, val) {
-    if (!this._updating) {
+    if (!this._nowUpdating) {
       throw new DepMutationError("Cannot mutate DepJsonCell!");
     }
     else return super.setProperty(getPath, basePath, obj, prop, val);
   }
 
   deleteProperty(getPath, basePath, obj, prop) {
-    if (!this._updating) {
+    if (!this._nowUpdating) {
       throw new DepMutationError("Cannot mutate DepJsonCell!");
     }
     else return super.deleteProperty(getPath, basePath, obj, prop);
