@@ -63,70 +63,99 @@ let lengthChange = patchVal =>
 
 export let UPDATE = Symbol('update');
 
-export class JsonCell extends rx.ObsBase {
+export class ObsJsonCell extends rx.ObsBase {
   constructor(_base) {
     super();
-    this._base = _base != null ? _base: {};
+    this._base = _base;
     this.onChange = this._mkEv(() => jsondiffpatch.diff({}, this._base));
     this.onUnsafeMutation = this._mkEv(() => {});
-    this._data = new Proxy(this._base, this.conf([], null));
+    this._oldUpdating = false;
+    this._updating = true;
+    this._data = new Proxy({value: this._base}, this.conf([], null));
+    this._updating = false;
+    this._oldUpdating = false;
   }
 
-  get data() {return this._data;}
-  set data(val) {this.update(val);}
+  _update (newVal) {
+    this._oldUpdating = this._updating;
+    this._updating = true;
+    try {
+      rx.snap(() => {
+        let diff = jsondiffpatch.diff(this._data, {value: newVal});
+        jsondiffpatch.patch(this._data, diff);
+      });
+    }
+    finally {
+      this._updating = this._oldUpdating;
+    }
+    return true;
+  }
 
-  update (newVal) {
-    rx.snap(() => {
-      let diff = jsondiffpatch.diff(this.data, newVal);
-      jsondiffpatch.patch(this.data, diff);
+  all () {return this.data;}
+  readonly () {return new DepJsonCell(() => this.data)}
+
+  get data() {return this._data.value;}
+
+  mkDeleteProperty (getPath, basePath) {
+    return (obj, prop) => this.deleteProperty(getPath, basePath, obj, prop);
+  }
+
+  mkSetProperty (getPath, basePath) {
+    return (obj, prop, val) => this.setProperty(getPath, basePath, obj, prop, val);
+  }
+
+  deleteProperty (getPath, basePath, obj, prop) {
+    return rx.snap(() => {
+      let path = getPath(prop);
+      if (recorder.stack.length > 0) {
+        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+        // bind is extremely likely to lead to infinite loops.
+        console.warn(
+          `Warning: deleting nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
+        );
+        this.onUnsafeMutation.pub({op: 'delete', path, obj, prop, base: this._base})
+      }
+      recorder.mutating(() => {
+        let old = obj[prop];
+        let diff = prefixDiff(basePath, [{[prop]: old}, 0, 0]);
+        if(prop in obj) {
+          delete obj[prop];
+          this.onChange.pub(diff);
+        }
+      });
       return true;
-    });
+    })
+  }
+
+  setProperty (getPath, basePath, obj, prop, val) {
+    return rx.snap(() => {
+      let path = getPath(prop);
+      if (recorder.stack.length > 0) {
+        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+        // bind is extremely likely to lead to infinite loops.
+        console.warn(
+          `Warning: updating nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
+        );
+        this.onUnsafeMutation.pub({op: 'set', path, obj, prop, val, base: this._base});
+      }
+      recorder.mutating(() => {
+        let old = rx.snap(() => obj[prop]);
+        let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
+        if (diff) {
+          jsondiffpatch.patch(obj, diff);
+          this.onChange.pub(prefixDiff(basePath, diff));
+        }
+      });
+      return true;
+    })
   }
 
   conf(basePath) {
     let getPath = (...props) => basePath.concat(props);
 
     return {
-      deleteProperty: (obj, prop) => rx.snap(() => {
-        let path = getPath(prop);
-        if (recorder.stack.length > 0) {
-          // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-          // bind is extremely likely to lead to infinite loops.
-          console.warn(
-            `Warning: deleting nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
-          );
-          this.onUnsafeMutation.pub({op: 'delete', path, obj, prop, base: this._base})
-        }
-        recorder.mutating(() => {
-          let old = obj[prop];
-          let diff = prefixDiff(basePath, [{[prop]: old}, 0, 0]);
-          if(prop in obj) {
-            delete obj[prop];
-            this.onChange.pub(diff);
-          }
-        });
-        return true;
-      }),
-      set: (obj, prop, val) => rx.snap(() => {
-        let path = getPath(prop);
-        if (recorder.stack.length > 0) {
-          // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-          // bind is extremely likely to lead to infinite loops.
-          console.warn(
-            `Warning: updating nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
-          );
-          this.onUnsafeMutation.pub({op: 'set', path, obj, prop, val, base: this._base});
-        }
-        recorder.mutating(() => {
-          let old = rx.snap(() => obj[prop]);
-          let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
-          if (diff) {
-            jsondiffpatch.patch(obj, diff);
-            this.onChange.pub(prefixDiff(basePath, diff));
-          }
-        });
-        return true;
-      }),
+      deleteProperty: this.mkDeleteProperty(getPath, basePath),
+      set: this.mkSetProperty(getPath, basePath),
       get: (obj, prop) => {
         let val = obj[prop];
         if (prop === '__proto__' || _.isFunction(val)) {
@@ -139,7 +168,7 @@ export class JsonCell extends rx.ObsBase {
         if (prop === 'length' && _.isArray(obj)) {
           let oldVal = obj.length;
           recorder.sub(this.onChange, () => {
-            let newVal = deepGet(this._base, path);
+            let newVal = deepGet(this._base, path.slice(1));  // necessary because of wrapping in value field
             if(newVal !== oldVal){
               oldVal = newVal;
               return true;
@@ -157,7 +186,7 @@ export class JsonCell extends rx.ObsBase {
         return val;
       },
       has: (obj, prop) => {
-        let path = getPath(prop);
+        let path = getPath(prop).slice(1);  // necessary because we wrap within the value field.
         let had = prop in obj;
         recorder.sub(this.onChange, patch => {
           let has = deepHas(this._base, path);
@@ -191,7 +220,45 @@ export class JsonCell extends rx.ObsBase {
   }
 }
 
-export let jsonCell = _base => new JsonCell(_base).data;
+export class DepMutationError extends Error {
+  // https://stackoverflow.com/questions/31089801/extending-error-in-javascript-with-es6-syntax
+  constructor(...args) {
+    super(...args)
+    Error.captureStackTrace(this, DepMutationError)
+  }
+}
+
+export class DepJsonCell extends ObsJsonCell {
+  constructor(f, init = {}) {
+    super(init);
+    this.f = f;
+    let c = rx.bind(this.f);
+    rx.autoSub(c.onSet, ([o, n]) => this._update(n))
+  }
+
+  setProperty(getPath, basePath, obj, prop, val) {
+    if (!this._updating) {
+      throw new DepMutationError("Cannot mutate DepJsonCell!");
+    }
+    else return super.setProperty(getPath, basePath, obj, prop, val);
+  }
+
+  deleteProperty(getPath, basePath, obj, prop) {
+    if (!this._updating) {
+      throw new DepMutationError("Cannot mutate DepJsonCell!");
+    }
+    else return super.deleteProperty(getPath, basePath, obj, prop);
+  }
+}
+
+export class SrcJsonCell extends ObsJsonCell {
+  constructor (init) {super(init);}
+  update(val) {return this._update(val);}
+  set data(val) {this._update(val);}
+  get data() {return this._data.value;}
+}
+
+export let jsonCell = _base => new SrcJsonCell(_base).data;
 
 export let update = (cell, newVal) => rx.snap(() => {
   let diff = jsondiffpatch.diff(cell, newVal);
