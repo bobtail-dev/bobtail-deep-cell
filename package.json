@@ -1,6 +1,6 @@
 {
   "name": "bobtail-json-cell",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "",
   "main": "dist/main.js",
   "homepage": "https://github.com/bobtail-dev/bobtail-deep-cell#readme",
