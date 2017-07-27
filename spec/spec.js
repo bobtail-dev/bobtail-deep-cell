@@ -3,7 +3,7 @@ import _ from 'underscore';
 import * as rx from 'bobtail-rx';
 import * as jsonRx from '../src/main.js';
 let {snap, bind} = rx;
-let {logReturn, patchHas, JsonCell, jsonCell} = jsonRx;
+let {DepMutationError, DepJsonCell, SrcJsonCell, jsonCell} = jsonRx;
 import deepGet from 'lodash.get';
 
 jasmine.CATCH_EXCEPTIONS = false;
@@ -15,6 +15,7 @@ describe('get', () => {
       e: 3,
       f: {x: {y: 42, z: ['e', 'b', 'r', 'a']}}
     });
+    console.info(foo);
     let zebra = bind(() => {
       let suffix = deepGet(foo, 'f.x.z');
       return suffix ? 'z' + suffix.join('') : undefined;
@@ -113,7 +114,7 @@ describe('array', () => {
 
 describe('onUnsafeMutation', () => {
   it('should fire if a value is set from within a bind context', () => {
-    let foobar = new JsonCell({a: 1, b: 2, c: 'lala'});
+    let foobar = new SrcJsonCell({a: 1, b: 2, c: 'lala'});
     let spy = jasmine.createSpy('spy');
     foobar.onUnsafeMutation.pub = spy;
     expect(spy.calls.count()).toBe(0);
@@ -125,4 +126,40 @@ describe('onUnsafeMutation', () => {
     foobar.data.c = 'lalala';
     expect(spy.calls.count()).toBe(2);
   })
+});
+
+describe('DepJsonCell', () => {
+  it('should react to changes', () => {
+    let testCell = rx.cell({a: {b: 42, c: 60}, c: 0});
+    let x = new DepJsonCell(() => testCell.get().a);
+    let y = bind(() => x.data);
+    expect(x.data).toEqual({b: 42, c: 60});
+    testCell.set({a: {x: 42}, b: 40});
+    expect(x.data).toEqual({x: 42});
+    testCell.set({a: 80});
+    expect(x.data).toEqual(80);
+    expect(y.get()).toEqual(80);
+    testCell.set({a: {b: 'c'}});
+    expect(x.data).toEqual({b: 'c'});
+    expect(y.get()).toEqual({b: 'c'});
+  });
+  it('should not permit writing or deleting properties', () => {
+    let testCell = rx.cell({a: {b: 42, c: 60}, c: 0});
+    let x = new DepJsonCell(() => testCell.get());
+    expect(() => delete x.data.b).toThrowError("Cannot mutate DepJsonCell!");
+    expect(() => x.data.a = 90).toThrowError("Cannot mutate DepJsonCell!");
+  })
+});
+
+describe('JsonCell', () => {
+  it('should support primitive values', () => {
+    let x = new SrcJsonCell(42);
+    expect(x.data).toBe(42);
+    x.data = null;
+    expect(x.data).toBeNull();
+    x.data = {a: 'b'};
+    expect(x.data).toEqual({a: 'b'});
+    x.data = false;
+    expect(x.data).toBe(false);
+  });
 });
