@@ -155,6 +155,25 @@ export class ObsJsonCell extends rx.ObsBase {
     return setProperty.call(this, getPath, basePath, obj, prop, val);
   }
 
+  _makeReadOnly() {
+    let oldSet = this.setProperty;
+    this.setProperty = function(getPath, basePath, obj, prop, val) {
+      if (!this._nowUpdating) {
+        throw new DepMutationError("Cannot mutate DepJsonCell!");
+      }
+      else return oldSet.call(this, getPath, basePath, obj, prop, val);
+    };
+
+    let oldDelete = this.deleteProperty;
+    this.deleteProperty = function (getPath, basePath, obj, prop) {
+      if (!this._nowUpdating) {
+        throw new DepMutationError("Cannot mutate DepJsonCell!");
+      }
+      else return oldDelete.call(this, getPath, basePath, obj, prop);
+    };
+    return this;
+  }
+
   conf(basePath) {
     let getPath = (...props) => basePath.concat(props);
 
@@ -233,29 +252,13 @@ export class DepMutationError extends Error {
   }
 }
 
-export function makeReadOnly(base) {
-  base.setProperty = function(getPath, basePath, obj, prop, val) {
-    if (!this._nowUpdating) {
-      throw new DepMutationError("Cannot mutate DepJsonCell!");
-    }
-    else return setProperty.call(base, getPath, basePath, obj, prop, val);
-  };
-
-  base.deleteProperty = function (getPath, basePath, obj, prop) {
-    if (!this._nowUpdating) {
-      throw new DepMutationError("Cannot mutate DepJsonCell!");
-    }
-    else return deleteProperty.call(base, getPath, basePath, obj, prop);
-  };
-}
-
 export class DepJsonCell extends ObsJsonCell {
   constructor(f, init = {}) {
     super(init);
     this.f = f;
     let c = rx.bind(this.f);
     rx.autoSub(c.onSet, ([o, n]) => this._update(n));
-    makeReadOnly(this);
+    this._makeReadOnly();
   }
 }
 

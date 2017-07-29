@@ -18,7 +18,6 @@
   });
   exports.update = exports.jsonCell = exports.SrcJsonCell = exports.DepJsonCell = exports.DepMutationError = exports.ObsJsonCell = exports.UPDATE = exports.patchHas = undefined;
   exports.logReturn = logReturn;
-  exports.makeReadOnly = makeReadOnly;
 
   var _underscore2 = _interopRequireDefault(_underscore);
 
@@ -358,6 +357,24 @@
         return _setProperty.call(this, getPath, basePath, obj, prop, val);
       }
     }, {
+      key: '_makeReadOnly',
+      value: function _makeReadOnly() {
+        var oldSet = this.setProperty;
+        this.setProperty = function (getPath, basePath, obj, prop, val) {
+          if (!this._nowUpdating) {
+            throw new DepMutationError("Cannot mutate DepJsonCell!");
+          } else return oldSet.call(this, getPath, basePath, obj, prop, val);
+        };
+
+        var oldDelete = this.deleteProperty;
+        this.deleteProperty = function (getPath, basePath, obj, prop) {
+          if (!this._nowUpdating) {
+            throw new DepMutationError("Cannot mutate DepJsonCell!");
+          } else return oldDelete.call(this, getPath, basePath, obj, prop);
+        };
+        return this;
+      }
+    }, {
       key: 'conf',
       value: function conf(basePath) {
         var _this8 = this;
@@ -468,20 +485,6 @@
     return DepMutationError;
   }(Error);
 
-  function makeReadOnly(base) {
-    base.setProperty = function (getPath, basePath, obj, prop, val) {
-      if (!this._nowUpdating) {
-        throw new DepMutationError("Cannot mutate DepJsonCell!");
-      } else return _setProperty.call(base, getPath, basePath, obj, prop, val);
-    };
-
-    base.deleteProperty = function (getPath, basePath, obj, prop) {
-      if (!this._nowUpdating) {
-        throw new DepMutationError("Cannot mutate DepJsonCell!");
-      } else return _deleteProperty.call(base, getPath, basePath, obj, prop);
-    };
-  }
-
   var DepJsonCell = exports.DepJsonCell = function (_ObsJsonCell) {
     _inherits(DepJsonCell, _ObsJsonCell);
 
@@ -501,7 +504,7 @@
 
         return _this10._update(n);
       });
-      makeReadOnly(_this10);
+      _this10._makeReadOnly();
       return _this10;
     }
 
