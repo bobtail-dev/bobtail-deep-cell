@@ -148,7 +148,7 @@ describe('DepJsonCell', () => {
     let x = new DepJsonCell(() => testCell.get());
     expect(() => delete x.data.b).toThrowError("Cannot mutate DepJsonCell!");
     expect(() => x.data.a = 90).toThrowError("Cannot mutate DepJsonCell!");
-  })
+  });
 });
 
 describe('JsonCell', () => {

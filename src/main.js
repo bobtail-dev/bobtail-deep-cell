@@ -63,6 +63,52 @@ let lengthChange = patchVal =>
 
 export let UPDATE = Symbol('update');
 
+function deleteProperty (getPath, basePath, obj, prop) {
+  return rx.snap(() => {
+    let path = getPath(prop);
+    if (recorder.stack.length > 0) {
+      // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+      // bind is extremely likely to lead to infinite loops.
+      console.warn(
+        `Warning: deleting nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
+      );
+      this.onUnsafeMutation.pub({op: 'delete', path, obj, prop, base: this._base})
+    }
+    recorder.mutating(() => {
+      let old = obj[prop];
+      let diff = prefixDiff(basePath, [{[prop]: old}, 0, 0]);
+      if(prop in obj) {
+        delete obj[prop];
+        this.onChange.pub(diff);
+      }
+    });
+    return true;
+  })
+}
+
+function setProperty (getPath, basePath, obj, prop, val) {
+  return rx.snap(() => {
+    let path = getPath(prop);
+    if (recorder.stack.length > 0) {
+      // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+      // bind is extremely likely to lead to infinite loops.
+      console.warn(
+        `Warning: updating nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
+      );
+      this.onUnsafeMutation.pub({op: 'set', path, obj, prop, val, base: this._base});
+    }
+    recorder.mutating(() => {
+      let old = rx.snap(() => obj[prop]);
+      let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
+      if (diff) {
+        jsondiffpatch.patch(obj, diff);
+        this.onChange.pub(prefixDiff(basePath, diff));
+      }
+    });
+    return true;
+  })
+}
+
 export class ObsJsonCell extends rx.ObsBase {
   constructor(_base) {
     super();
@@ -102,49 +148,11 @@ export class ObsJsonCell extends rx.ObsBase {
   }
 
   deleteProperty (getPath, basePath, obj, prop) {
-    return rx.snap(() => {
-      let path = getPath(prop);
-      if (recorder.stack.length > 0) {
-        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-        // bind is extremely likely to lead to infinite loops.
-        console.warn(
-          `Warning: deleting nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
-        );
-        this.onUnsafeMutation.pub({op: 'delete', path, obj, prop, base: this._base})
-      }
-      recorder.mutating(() => {
-        let old = obj[prop];
-        let diff = prefixDiff(basePath, [{[prop]: old}, 0, 0]);
-        if(prop in obj) {
-          delete obj[prop];
-          this.onChange.pub(diff);
-        }
-      });
-      return true;
-    })
+    return deleteProperty.call(this, getPath, basePath, obj, prop);
   }
 
   setProperty (getPath, basePath, obj, prop, val) {
-    return rx.snap(() => {
-      let path = getPath(prop);
-      if (recorder.stack.length > 0) {
-        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-        // bind is extremely likely to lead to infinite loops.
-        console.warn(
-          `Warning: updating nested element at ${path.join('.')} from within a bind context. Affected object:`, obj
-        );
-        this.onUnsafeMutation.pub({op: 'set', path, obj, prop, val, base: this._base});
-      }
-      recorder.mutating(() => {
-        let old = rx.snap(() => obj[prop]);
-        let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
-        if (diff) {
-          jsondiffpatch.patch(obj, diff);
-          this.onChange.pub(prefixDiff(basePath, diff));
-        }
-      });
-      return true;
-    })
+    return setProperty.call(this, getPath, basePath, obj, prop, val);
   }
 
   conf(basePath) {
@@ -225,26 +233,29 @@ export class DepMutationError extends Error {
   }
 }
 
+export function makeReadOnly(base) {
+  base.setProperty = function(getPath, basePath, obj, prop, val) {
+    if (!this._nowUpdating) {
+      throw new DepMutationError("Cannot mutate DepJsonCell!");
+    }
+    else return setProperty.call(base, getPath, basePath, obj, prop, val);
+  };
+
+  base.deleteProperty = function (getPath, basePath, obj, prop) {
+    if (!this._nowUpdating) {
+      throw new DepMutationError("Cannot mutate DepJsonCell!");
+    }
+    else return deleteProperty.call(base, getPath, basePath, obj, prop);
+  };
+}
+
 export class DepJsonCell extends ObsJsonCell {
   constructor(f, init = {}) {
     super(init);
     this.f = f;
     let c = rx.bind(this.f);
-    rx.autoSub(c.onSet, ([o, n]) => this._update(n))
-  }
-
-  setProperty(getPath, basePath, obj, prop, val) {
-    if (!this._nowUpdating) {
-      throw new DepMutationError("Cannot mutate DepJsonCell!");
-    }
-    else return super.setProperty(getPath, basePath, obj, prop, val);
-  }
-
-  deleteProperty(getPath, basePath, obj, prop) {
-    if (!this._nowUpdating) {
-      throw new DepMutationError("Cannot mutate DepJsonCell!");
-    }
-    else return super.deleteProperty(getPath, basePath, obj, prop);
+    rx.autoSub(c.onSet, ([o, n]) => this._update(n));
+    makeReadOnly(this);
   }
 }
 

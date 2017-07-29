@@ -18,6 +18,7 @@
   });
   exports.update = exports.jsonCell = exports.SrcJsonCell = exports.DepJsonCell = exports.DepMutationError = exports.ObsJsonCell = exports.UPDATE = exports.patchHas = undefined;
   exports.logReturn = logReturn;
+  exports.makeReadOnly = makeReadOnly;
 
   var _underscore2 = _interopRequireDefault(_underscore);
 
@@ -92,46 +93,6 @@
     };
   }();
 
-  var _get = function get(object, property, receiver) {
-    if (object === null) object = Function.prototype;
-    var desc = Object.getOwnPropertyDescriptor(object, property);
-
-    if (desc === undefined) {
-      var parent = Object.getPrototypeOf(object);
-
-      if (parent === null) {
-        return undefined;
-      } else {
-        return get(parent, property, receiver);
-      }
-    } else if ("value" in desc) {
-      return desc.value;
-    } else {
-      var getter = desc.get;
-
-      if (getter === undefined) {
-        return undefined;
-      }
-
-      return getter.call(receiver);
-    }
-  };
-
-  function _defineProperty(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, {
-        value: value,
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
-    } else {
-      obj[key] = value;
-    }
-
-    return obj;
-  }
-
   function _classCallCheck(instance, Constructor) {
     if (!(instance instanceof Constructor)) {
       throw new TypeError("Cannot call a class as a function");
@@ -178,6 +139,21 @@
       }
     });
     if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass;
+  }
+
+  function _defineProperty(obj, key, value) {
+    if (key in obj) {
+      Object.defineProperty(obj, key, {
+        value: value,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    } else {
+      obj[key] = value;
+    }
+
+    return obj;
   }
 
   function _toArray(arr) {
@@ -249,23 +225,71 @@
 
   var UPDATE = exports.UPDATE = Symbol('update');
 
+  function _deleteProperty(getPath, basePath, obj, prop) {
+    var _this = this;
+
+    return rx.snap(function () {
+      var path = getPath(prop);
+      if (recorder.stack.length > 0) {
+        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+        // bind is extremely likely to lead to infinite loops.
+        console.warn('Warning: deleting nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
+        _this.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: _this._base });
+      }
+      recorder.mutating(function () {
+        var old = obj[prop];
+        var diff = prefixDiff(basePath, [_defineProperty({}, prop, old), 0, 0]);
+        if (prop in obj) {
+          delete obj[prop];
+          _this.onChange.pub(diff);
+        }
+      });
+      return true;
+    });
+  }
+
+  function _setProperty(getPath, basePath, obj, prop, val) {
+    var _this2 = this;
+
+    return rx.snap(function () {
+      var path = getPath(prop);
+      if (recorder.stack.length > 0) {
+        // the default mutation warning is nowhere near dire enough. mutating nested objects within a
+        // bind is extremely likely to lead to infinite loops.
+        console.warn('Warning: updating nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
+        _this2.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: _this2._base });
+      }
+      recorder.mutating(function () {
+        var old = rx.snap(function () {
+          return obj[prop];
+        });
+        var diff = jsondiffpatch.diff(_defineProperty({}, prop, old), _defineProperty({}, prop, val));
+        if (diff) {
+          jsondiffpatch.patch(obj, diff);
+          _this2.onChange.pub(prefixDiff(basePath, diff));
+        }
+      });
+      return true;
+    });
+  }
+
   var ObsJsonCell = exports.ObsJsonCell = function (_rx$ObsBase) {
     _inherits(ObsJsonCell, _rx$ObsBase);
 
     function ObsJsonCell(_base) {
       _classCallCheck(this, ObsJsonCell);
 
-      var _this = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
+      var _this3 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
 
-      _this._base = _base;
-      _this.onChange = _this._mkEv(function () {
-        return jsondiffpatch.diff({}, _this._base);
+      _this3._base = _base;
+      _this3.onChange = _this3._mkEv(function () {
+        return jsondiffpatch.diff({}, _this3._base);
       });
-      _this.onUnsafeMutation = _this._mkEv(function () {});
-      _this._updating(function () {
-        return _this._data = new Proxy({ value: _this._base }, _this.conf([], null));
+      _this3.onUnsafeMutation = _this3._mkEv(function () {});
+      _this3._updating(function () {
+        return _this3._data = new Proxy({ value: _this3._base }, _this3.conf([], null));
       });
-      return _this;
+      return _this3;
     }
 
     _createClass(ObsJsonCell, [{
@@ -283,11 +307,11 @@
     }, {
       key: '_update',
       value: function _update(newVal) {
-        var _this2 = this;
+        var _this4 = this;
 
         this._updating(function () {
-          var diff = jsondiffpatch.diff(_this2._data, { value: newVal });
-          jsondiffpatch.patch(_this2._data, diff);
+          var diff = jsondiffpatch.diff(_this4._data, { value: newVal });
+          jsondiffpatch.patch(_this4._data, diff);
         });
         return true;
       }
@@ -299,79 +323,39 @@
     }, {
       key: 'readonly',
       value: function readonly() {
-        var _this3 = this;
+        var _this5 = this;
 
         return new DepJsonCell(function () {
-          return _this3.data;
+          return _this5.data;
         });
       }
     }, {
       key: 'mkDeleteProperty',
       value: function mkDeleteProperty(getPath, basePath) {
-        var _this4 = this;
+        var _this6 = this;
 
         return function (obj, prop) {
-          return _this4.deleteProperty(getPath, basePath, obj, prop);
+          return _this6.deleteProperty(getPath, basePath, obj, prop);
         };
       }
     }, {
       key: 'mkSetProperty',
       value: function mkSetProperty(getPath, basePath) {
-        var _this5 = this;
+        var _this7 = this;
 
         return function (obj, prop, val) {
-          return _this5.setProperty(getPath, basePath, obj, prop, val);
+          return _this7.setProperty(getPath, basePath, obj, prop, val);
         };
       }
     }, {
       key: 'deleteProperty',
       value: function deleteProperty(getPath, basePath, obj, prop) {
-        var _this6 = this;
-
-        return rx.snap(function () {
-          var path = getPath(prop);
-          if (recorder.stack.length > 0) {
-            // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-            // bind is extremely likely to lead to infinite loops.
-            console.warn('Warning: deleting nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-            _this6.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: _this6._base });
-          }
-          recorder.mutating(function () {
-            var old = obj[prop];
-            var diff = prefixDiff(basePath, [_defineProperty({}, prop, old), 0, 0]);
-            if (prop in obj) {
-              delete obj[prop];
-              _this6.onChange.pub(diff);
-            }
-          });
-          return true;
-        });
+        return _deleteProperty.call(this, getPath, basePath, obj, prop);
       }
     }, {
       key: 'setProperty',
       value: function setProperty(getPath, basePath, obj, prop, val) {
-        var _this7 = this;
-
-        return rx.snap(function () {
-          var path = getPath(prop);
-          if (recorder.stack.length > 0) {
-            // the default mutation warning is nowhere near dire enough. mutating nested objects within a
-            // bind is extremely likely to lead to infinite loops.
-            console.warn('Warning: updating nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-            _this7.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: _this7._base });
-          }
-          recorder.mutating(function () {
-            var old = rx.snap(function () {
-              return obj[prop];
-            });
-            var diff = jsondiffpatch.diff(_defineProperty({}, prop, old), _defineProperty({}, prop, val));
-            if (diff) {
-              jsondiffpatch.patch(obj, diff);
-              _this7.onChange.pub(prefixDiff(basePath, diff));
-            }
-          });
-          return true;
-        });
+        return _setProperty.call(this, getPath, basePath, obj, prop, val);
       }
     }, {
       key: 'conf',
@@ -484,6 +468,20 @@
     return DepMutationError;
   }(Error);
 
+  function makeReadOnly(base) {
+    base.setProperty = function (getPath, basePath, obj, prop, val) {
+      if (!this._nowUpdating) {
+        throw new DepMutationError("Cannot mutate DepJsonCell!");
+      } else return _setProperty.call(base, getPath, basePath, obj, prop, val);
+    };
+
+    base.deleteProperty = function (getPath, basePath, obj, prop) {
+      if (!this._nowUpdating) {
+        throw new DepMutationError("Cannot mutate DepJsonCell!");
+      } else return _deleteProperty.call(base, getPath, basePath, obj, prop);
+    };
+  }
+
   var DepJsonCell = exports.DepJsonCell = function (_ObsJsonCell) {
     _inherits(DepJsonCell, _ObsJsonCell);
 
@@ -503,24 +501,9 @@
 
         return _this10._update(n);
       });
+      makeReadOnly(_this10);
       return _this10;
     }
-
-    _createClass(DepJsonCell, [{
-      key: 'setProperty',
-      value: function setProperty(getPath, basePath, obj, prop, val) {
-        if (!this._nowUpdating) {
-          throw new DepMutationError("Cannot mutate DepJsonCell!");
-        } else return _get(DepJsonCell.prototype.__proto__ || Object.getPrototypeOf(DepJsonCell.prototype), 'setProperty', this).call(this, getPath, basePath, obj, prop, val);
-      }
-    }, {
-      key: 'deleteProperty',
-      value: function deleteProperty(getPath, basePath, obj, prop) {
-        if (!this._nowUpdating) {
-          throw new DepMutationError("Cannot mutate DepJsonCell!");
-        } else return _get(DepJsonCell.prototype.__proto__ || Object.getPrototypeOf(DepJsonCell.prototype), 'deleteProperty', this).call(this, getPath, basePath, obj, prop);
-      }
-    }]);
 
     return DepJsonCell;
   }(ObsJsonCell);
