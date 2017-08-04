@@ -109,6 +109,36 @@ function setProperty (getPath, basePath, obj, prop, val) {
   })
 }
 
+function getProperty(getPath, basePath, obj, prop) {
+  let val = obj[prop];
+  if (prop === '__proto__' || _.isFunction(val)) {
+    return val;
+  }
+  if (prop === UPDATE || (prop === 'updateRxb' && !('updateRxb' in obj))) {
+    return other => jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
+  }
+  let path = getPath(prop);
+  if (prop === 'length' && _.isArray(obj)) {
+    let oldVal = obj.length;
+    recorder.sub(this.onChange, () => {
+      let newVal = deepGet(this._base, path.slice(1));  // necessary because of wrapping in value field
+      if(newVal !== oldVal){
+        oldVal = newVal;
+        return true;
+      }
+      return false;
+    });
+  }
+  else {
+    recorder.sub(this.onChange, patch => patchHas(patch, path));
+  }
+  // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
+  if (_.isObject(val)) {
+    return new Proxy(val, this.conf(getPath(prop), obj));
+  }
+  return val;
+}
+
 export class ObsJsonCell extends rx.ObsBase {
   constructor(_base) {
     super();
@@ -147,12 +177,20 @@ export class ObsJsonCell extends rx.ObsBase {
     return (obj, prop, val) => this.setProperty(getPath, basePath, obj, prop, val);
   }
 
+  mkGetProperty (getPath, basePath) {
+    return (obj, prop) => this.getProperty(getPath, basePath, obj, prop);
+  }
+
   deleteProperty (getPath, basePath, obj, prop) {
     return deleteProperty.call(this, getPath, basePath, obj, prop);
   }
 
   setProperty (getPath, basePath, obj, prop, val) {
     return setProperty.call(this, getPath, basePath, obj, prop, val);
+  }
+
+  getProperty (getPath, basePath, obj, prop) {
+    return getProperty.call(this, getPath, basePath, obj, prop);
   }
 
   _makeReadOnly() {
@@ -180,35 +218,7 @@ export class ObsJsonCell extends rx.ObsBase {
     return {
       deleteProperty: this.mkDeleteProperty(getPath, basePath),
       set: this.mkSetProperty(getPath, basePath),
-      get: (obj, prop) => {
-        let val = obj[prop];
-        if (prop === '__proto__' || _.isFunction(val)) {
-          return val;
-        }
-        if (prop === UPDATE || (prop === 'updateRxb' && !('updateRxb' in obj))) {
-          return other => jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
-        }
-        let path = getPath(prop);
-        if (prop === 'length' && _.isArray(obj)) {
-          let oldVal = obj.length;
-          recorder.sub(this.onChange, () => {
-            let newVal = deepGet(this._base, path.slice(1));  // necessary because of wrapping in value field
-            if(newVal !== oldVal){
-              oldVal = newVal;
-              return true;
-            }
-            return false;
-          });
-        }
-        else {
-          recorder.sub(this.onChange, patch => patchHas(patch, path));
-        }
-        // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
-        if (_.isObject(val)) {
-          return new Proxy(val, this.conf(getPath(prop), obj));
-        }
-        return val;
-      },
+      get: this.mkGetProperty(getPath, basePath),
       has: (obj, prop) => {
         let path = getPath(prop).slice(1);  // necessary because we wrap within the value field.
         let had = prop in obj;
@@ -233,9 +243,7 @@ export class ObsJsonCell extends rx.ObsBase {
             return true;
           }
           // true if we added or removed elements to this array, else false
-          return (delta._t === 'a') && _.chain(delta).omit('_t').values().value().some(
-
-          );
+          return (delta._t === 'a') && _.chain(delta).omit('_t').values().value().some();
         });
 
         return Reflect.ownKeys(obj);

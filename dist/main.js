@@ -272,23 +272,58 @@
     });
   }
 
+  function _getProperty(getPath, basePath, obj, prop) {
+    var _this3 = this;
+
+    var val = obj[prop];
+    if (prop === '__proto__' || _underscore2.default.isFunction(val)) {
+      return val;
+    }
+    if (prop === UPDATE || prop === 'updateRxb' && !('updateRxb' in obj)) {
+      return function (other) {
+        return jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
+      };
+    }
+    var path = getPath(prop);
+    if (prop === 'length' && _underscore2.default.isArray(obj)) {
+      var oldVal = obj.length;
+      recorder.sub(this.onChange, function () {
+        var newVal = (0, _lodash2.default)(_this3._base, path.slice(1)); // necessary because of wrapping in value field
+        if (newVal !== oldVal) {
+          oldVal = newVal;
+          return true;
+        }
+        return false;
+      });
+    } else {
+      recorder.sub(this.onChange, function (patch) {
+        return patchHas(patch, path);
+      });
+    }
+    // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
+    if (_underscore2.default.isObject(val)) {
+      return new Proxy(val, this.conf(getPath(prop), obj));
+    }
+    return val;
+  }
+
   var ObsJsonCell = exports.ObsJsonCell = function (_rx$ObsBase) {
     _inherits(ObsJsonCell, _rx$ObsBase);
 
     function ObsJsonCell(_base) {
       _classCallCheck(this, ObsJsonCell);
 
-      var _this3 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
+      var _this4 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
 
-      _this3._base = _base;
-      _this3.onChange = _this3._mkEv(function () {
-        return jsondiffpatch.diff({}, _this3._base);
+      _this4._base = _base;
+      _this4.onChange = _this4._mkEv(function () {
+        return jsondiffpatch.diff({}, _this4._base);
       });
-      _this3.onUnsafeMutation = _this3._mkEv(function () {});
-      _this3._updating(function () {
-        return _this3._data = new Proxy({ value: _this3._base }, _this3.conf([], null));
+      _this4.onUnsafeMutation = _this4._mkEv(function () {});
+      _this4._updating(function () {
+        return _this4._data = new Proxy({ value: _this4._base }, _this4.conf([], null));
       });
-      return _this3;
+      return _this4;
     }
 
     _createClass(ObsJsonCell, [{
@@ -306,11 +341,11 @@
     }, {
       key: '_update',
       value: function _update(newVal) {
-        var _this4 = this;
+        var _this5 = this;
 
         this._updating(function () {
-          var diff = jsondiffpatch.diff(_this4._data, { value: newVal });
-          jsondiffpatch.patch(_this4._data, diff);
+          var diff = jsondiffpatch.diff(_this5._data, { value: newVal });
+          jsondiffpatch.patch(_this5._data, diff);
         });
         return true;
       }
@@ -322,28 +357,37 @@
     }, {
       key: 'readonly',
       value: function readonly() {
-        var _this5 = this;
+        var _this6 = this;
 
         return new DepJsonCell(function () {
-          return _this5.data;
+          return _this6.data;
         });
       }
     }, {
       key: 'mkDeleteProperty',
       value: function mkDeleteProperty(getPath, basePath) {
-        var _this6 = this;
+        var _this7 = this;
 
         return function (obj, prop) {
-          return _this6.deleteProperty(getPath, basePath, obj, prop);
+          return _this7.deleteProperty(getPath, basePath, obj, prop);
         };
       }
     }, {
       key: 'mkSetProperty',
       value: function mkSetProperty(getPath, basePath) {
-        var _this7 = this;
+        var _this8 = this;
 
         return function (obj, prop, val) {
-          return _this7.setProperty(getPath, basePath, obj, prop, val);
+          return _this8.setProperty(getPath, basePath, obj, prop, val);
+        };
+      }
+    }, {
+      key: 'mkGetProperty',
+      value: function mkGetProperty(getPath, basePath) {
+        var _this9 = this;
+
+        return function (obj, prop) {
+          return _this9.getProperty(getPath, basePath, obj, prop);
         };
       }
     }, {
@@ -355,6 +399,11 @@
       key: 'setProperty',
       value: function setProperty(getPath, basePath, obj, prop, val) {
         return _setProperty.call(this, getPath, basePath, obj, prop, val);
+      }
+    }, {
+      key: 'getProperty',
+      value: function getProperty(getPath, basePath, obj, prop) {
+        return _getProperty.call(this, getPath, basePath, obj, prop);
       }
     }, {
       key: '_makeReadOnly',
@@ -377,7 +426,7 @@
     }, {
       key: 'conf',
       value: function conf(basePath) {
-        var _this8 = this;
+        var _this10 = this;
 
         var getPath = function getPath() {
           for (var _len = arguments.length, props = Array(_len), _key = 0; _key < _len; _key++) {
@@ -390,43 +439,12 @@
         return {
           deleteProperty: this.mkDeleteProperty(getPath, basePath),
           set: this.mkSetProperty(getPath, basePath),
-          get: function get(obj, prop) {
-            var val = obj[prop];
-            if (prop === '__proto__' || _underscore2.default.isFunction(val)) {
-              return val;
-            }
-            if (prop === UPDATE || prop === 'updateRxb' && !('updateRxb' in obj)) {
-              return function (other) {
-                return jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
-              };
-            }
-            var path = getPath(prop);
-            if (prop === 'length' && _underscore2.default.isArray(obj)) {
-              var oldVal = obj.length;
-              recorder.sub(_this8.onChange, function () {
-                var newVal = (0, _lodash2.default)(_this8._base, path.slice(1)); // necessary because of wrapping in value field
-                if (newVal !== oldVal) {
-                  oldVal = newVal;
-                  return true;
-                }
-                return false;
-              });
-            } else {
-              recorder.sub(_this8.onChange, function (patch) {
-                return patchHas(patch, path);
-              });
-            }
-            // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
-            if (_underscore2.default.isObject(val)) {
-              return new Proxy(val, _this8.conf(getPath(prop), obj));
-            }
-            return val;
-          },
+          get: this.mkGetProperty(getPath, basePath),
           has: function has(obj, prop) {
             var path = getPath(prop).slice(1); // necessary because we wrap within the value field.
             var had = prop in obj;
-            recorder.sub(_this8.onChange, function (patch) {
-              var has = (0, _lodash6.default)(_this8._base, path);
+            recorder.sub(_this10.onChange, function (patch) {
+              var has = (0, _lodash6.default)(_this10._base, path);
               if (had !== has) {
                 had = has;
                 return true;
@@ -436,7 +454,7 @@
             return had;
           },
           ownKeys: function ownKeys(obj) {
-            recorder.sub(_this8.onChange, function (patch) {
+            recorder.sub(_this10.onChange, function (patch) {
               var delta = (0, _lodash2.default)(patch, basePath);
               if (!delta) {
                 return false;
@@ -476,10 +494,10 @@
         args[_key2] = arguments[_key2];
       }
 
-      var _this9 = _possibleConstructorReturn(this, (_ref2 = DepMutationError.__proto__ || Object.getPrototypeOf(DepMutationError)).call.apply(_ref2, [this].concat(args)));
+      var _this11 = _possibleConstructorReturn(this, (_ref2 = DepMutationError.__proto__ || Object.getPrototypeOf(DepMutationError)).call.apply(_ref2, [this].concat(args)));
 
-      Error.captureStackTrace(_this9, DepMutationError);
-      return _this9;
+      Error.captureStackTrace(_this11, DepMutationError);
+      return _this11;
     }
 
     return DepMutationError;
@@ -493,19 +511,19 @@
 
       _classCallCheck(this, DepJsonCell);
 
-      var _this10 = _possibleConstructorReturn(this, (DepJsonCell.__proto__ || Object.getPrototypeOf(DepJsonCell)).call(this, init));
+      var _this12 = _possibleConstructorReturn(this, (DepJsonCell.__proto__ || Object.getPrototypeOf(DepJsonCell)).call(this, init));
 
-      _this10.f = f;
-      var c = rx.bind(_this10.f);
+      _this12.f = f;
+      var c = rx.bind(_this12.f);
       rx.autoSub(c.onSet, function (_ref3) {
         var _ref4 = _slicedToArray(_ref3, 2),
             o = _ref4[0],
             n = _ref4[1];
 
-        return _this10._update(n);
+        return _this12._update(n);
       });
-      _this10._makeReadOnly();
-      return _this10;
+      _this12._makeReadOnly();
+      return _this12;
     }
 
     return DepJsonCell;
