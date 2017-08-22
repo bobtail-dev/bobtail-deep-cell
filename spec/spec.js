@@ -151,7 +151,7 @@ describe('DepJsonCell', () => {
   });
 });
 
-describe('JsonCell', () => {
+describe('SrcJsonCell', () => {
   it('should support primitive values', () => {
     let x = new SrcJsonCell(42);
     expect(x.data).toBe(42);
@@ -162,4 +162,16 @@ describe('JsonCell', () => {
     x.data = false;
     expect(x.data).toBe(false);
   });
+});
+
+describe('arrays', () => {
+  it('should emit change events when splice is called', () => {
+    let src = new SrcJsonCell([1,2,3,4]);
+    let dep = bind(() => src.data);
+    expect(dep.raw()).toEqual([1,2,3,4]);
+    src.data.splice(0,1);
+    expect(dep.raw()).toEqual([2,3,4]);
+    src.data.splice(0,0,1);
+    expect(dep.raw()).toEqual([1,2,3,4]);
+  })
 });
