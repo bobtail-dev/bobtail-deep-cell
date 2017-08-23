@@ -102,7 +102,7 @@ function setProperty (getPath, basePath, obj, prop, val) {
       let diff = jsondiffpatch.diff({[prop]: old}, {[prop]: val});
       if (diff) {
         jsondiffpatch.patch(obj, diff);
-        this.onChange.pub(prefixDiff(basePath, diff));
+          this.onChange.pub(prefixDiff(basePath, diff));
       }
     });
     return true;
@@ -111,27 +111,10 @@ function setProperty (getPath, basePath, obj, prop, val) {
 
 function getProperty(getPath, basePath, obj, prop) {
   let val = obj[prop];
-  if (prop === '__proto__' || _.isFunction(val)) {
-    return val;
+  if (prop === '__proto__' || _.isFunction(obj[prop])) {
+    return obj[prop];
   }
-  if (prop === UPDATE || (prop === 'updateRxb' && !('updateRxb' in obj))) {
-    return other => jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
-  }
-  let path = getPath(prop);
-  if (prop === 'length' && _.isArray(obj)) {
-    let oldVal = obj.length;
-    recorder.sub(this.onChange, () => {
-      let newVal = deepGet(this._base, path.slice(1));  // necessary because of wrapping in value field
-      if(newVal !== oldVal){
-        oldVal = newVal;
-        return true;
-      }
-      return false;
-    });
-  }
-  else {
-    recorder.sub(this.onChange, patch => patchHas(patch, path));
-  }
+  this.subscribeProperty(getPath, obj, prop);
   // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
   if (_.isObject(val)) {
     return new Proxy(val, this.conf(getPath(prop), obj));
@@ -191,6 +174,24 @@ export class ObsJsonCell extends rx.ObsBase {
 
   getProperty (getPath, basePath, obj, prop) {
     return getProperty.call(this, getPath, basePath, obj, prop);
+  }
+
+  subscribeProperty(getPath, obj, prop) {
+    let path = getPath(prop);
+    if (prop === 'length' && _.isArray(obj)) {
+      let oldVal = obj.length;
+      recorder.sub(this.onChange, () => {
+        let newVal = deepGet(this._base, path.slice(1));  // necessary because of wrapping in value field
+        if(newVal !== oldVal){
+          oldVal = newVal;
+          return true;
+        }
+        return false;
+      });
+    }
+    else {
+      recorder.sub(this.onChange, patch => patchHas(patch, path));
+    }
   }
 
   _makeReadOnly() {

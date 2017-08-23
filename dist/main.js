@@ -273,33 +273,11 @@
   }
 
   function _getProperty(getPath, basePath, obj, prop) {
-    var _this3 = this;
-
     var val = obj[prop];
-    if (prop === '__proto__' || _underscore2.default.isFunction(val)) {
-      return val;
+    if (prop === '__proto__' || _underscore2.default.isFunction(obj[prop])) {
+      return obj[prop];
     }
-    if (prop === UPDATE || prop === 'updateRxb' && !('updateRxb' in obj)) {
-      return function (other) {
-        return jsondiffpatch.patch(obj, jsondiffpatch.diff(obj, other));
-      };
-    }
-    var path = getPath(prop);
-    if (prop === 'length' && _underscore2.default.isArray(obj)) {
-      var oldVal = obj.length;
-      recorder.sub(this.onChange, function () {
-        var newVal = (0, _lodash2.default)(_this3._base, path.slice(1)); // necessary because of wrapping in value field
-        if (newVal !== oldVal) {
-          oldVal = newVal;
-          return true;
-        }
-        return false;
-      });
-    } else {
-      recorder.sub(this.onChange, function (patch) {
-        return patchHas(patch, path);
-      });
-    }
+    this.subscribeProperty(getPath, obj, prop);
     // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
     if (_underscore2.default.isObject(val)) {
       return new Proxy(val, this.conf(getPath(prop), obj));
@@ -313,17 +291,17 @@
     function ObsJsonCell(_base) {
       _classCallCheck(this, ObsJsonCell);
 
-      var _this4 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
+      var _this3 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
 
-      _this4._base = _base;
-      _this4.onChange = _this4._mkEv(function () {
-        return jsondiffpatch.diff({}, _this4._base);
+      _this3._base = _base;
+      _this3.onChange = _this3._mkEv(function () {
+        return jsondiffpatch.diff({}, _this3._base);
       });
-      _this4.onUnsafeMutation = _this4._mkEv(function () {});
-      _this4._updating(function () {
-        return _this4._data = new Proxy({ value: _this4._base }, _this4.conf([], null));
+      _this3.onUnsafeMutation = _this3._mkEv(function () {});
+      _this3._updating(function () {
+        return _this3._data = new Proxy({ value: _this3._base }, _this3.conf([], null));
       });
-      return _this4;
+      return _this3;
     }
 
     _createClass(ObsJsonCell, [{
@@ -341,11 +319,11 @@
     }, {
       key: '_update',
       value: function _update(newVal) {
-        var _this5 = this;
+        var _this4 = this;
 
         this._updating(function () {
-          var diff = jsondiffpatch.diff(_this5._data, { value: newVal });
-          jsondiffpatch.patch(_this5._data, diff);
+          var diff = jsondiffpatch.diff(_this4._data, { value: newVal });
+          jsondiffpatch.patch(_this4._data, diff);
         });
         return true;
       }
@@ -357,37 +335,37 @@
     }, {
       key: 'readonly',
       value: function readonly() {
-        var _this6 = this;
+        var _this5 = this;
 
         return new DepJsonCell(function () {
-          return _this6.data;
+          return _this5.data;
         });
       }
     }, {
       key: 'mkDeleteProperty',
       value: function mkDeleteProperty(getPath, basePath) {
-        var _this7 = this;
+        var _this6 = this;
 
         return function (obj, prop) {
-          return _this7.deleteProperty(getPath, basePath, obj, prop);
+          return _this6.deleteProperty(getPath, basePath, obj, prop);
         };
       }
     }, {
       key: 'mkSetProperty',
       value: function mkSetProperty(getPath, basePath) {
-        var _this8 = this;
+        var _this7 = this;
 
         return function (obj, prop, val) {
-          return _this8.setProperty(getPath, basePath, obj, prop, val);
+          return _this7.setProperty(getPath, basePath, obj, prop, val);
         };
       }
     }, {
       key: 'mkGetProperty',
       value: function mkGetProperty(getPath, basePath) {
-        var _this9 = this;
+        var _this8 = this;
 
         return function (obj, prop) {
-          return _this9.getProperty(getPath, basePath, obj, prop);
+          return _this8.getProperty(getPath, basePath, obj, prop);
         };
       }
     }, {
@@ -404,6 +382,28 @@
       key: 'getProperty',
       value: function getProperty(getPath, basePath, obj, prop) {
         return _getProperty.call(this, getPath, basePath, obj, prop);
+      }
+    }, {
+      key: 'subscribeProperty',
+      value: function subscribeProperty(getPath, obj, prop) {
+        var _this9 = this;
+
+        var path = getPath(prop);
+        if (prop === 'length' && _underscore2.default.isArray(obj)) {
+          var oldVal = obj.length;
+          recorder.sub(this.onChange, function () {
+            var newVal = (0, _lodash2.default)(_this9._base, path.slice(1)); // necessary because of wrapping in value field
+            if (newVal !== oldVal) {
+              oldVal = newVal;
+              return true;
+            }
+            return false;
+          });
+        } else {
+          recorder.sub(this.onChange, function (patch) {
+            return patchHas(patch, path);
+          });
+        }
       }
     }, {
       key: '_makeReadOnly',
