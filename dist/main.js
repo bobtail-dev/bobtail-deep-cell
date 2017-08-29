@@ -1,22 +1,22 @@
 (function (global, factory) {
   if (typeof define === "function" && define.amd) {
-    define('bobtail-json-cell', ['exports', 'underscore', 'bobtail-rx', 'lodash.get', 'lodash.set', 'lodash.hasin', 'jsondiffpatch'], factory);
+    define('bobtail-json-cell', ['exports', 'underscore', 'bobtail-rx', 'lodash.get', 'lodash.set', 'lodash.hasin', 'lodash.clonedeep', 'jsondiffpatch'], factory);
   } else if (typeof exports !== "undefined") {
-    factory(exports, require('underscore'), require('bobtail-rx'), require('lodash.get'), require('lodash.set'), require('lodash.hasin'), require('jsondiffpatch'));
+    factory(exports, require('underscore'), require('bobtail-rx'), require('lodash.get'), require('lodash.set'), require('lodash.hasin'), require('lodash.clonedeep'), require('jsondiffpatch'));
   } else {
     var mod = {
       exports: {}
     };
-    factory(mod.exports, global._, global.rx, global.lodashGet, global.lodashSet, global.lodashHasin, global.jsondiffpatch);
+    factory(mod.exports, global._, global.rx, global.lodashGet, global.lodashSet, global.lodashHasin, global.lodashClonedeep, global.jsondiffpatch);
     global.bobtailJsonCell = mod.exports;
   }
-})(this, function (exports, _underscore, _bobtailRx, _lodash, _lodash3, _lodash5, _jsondiffpatch) {
+})(this, function (exports, _underscore, _bobtailRx, _lodash, _lodash3, _lodash5, _lodash7, _jsondiffpatch) {
   'use strict';
 
   Object.defineProperty(exports, "__esModule", {
     value: true
   });
-  exports.update = exports.jsonCell = exports.SrcJsonCell = exports.DepJsonCell = exports.DepMutationError = exports.ObsJsonCell = exports.UPDATE = exports.patchHas = undefined;
+  exports.update = exports.jsonCell = exports.SrcJsonCell = exports.DepJsonCell = exports.DepMutationError = exports.ObsJsonCell = exports.UPDATE = exports.patchHas = exports.IS_PROXY_SYM = undefined;
   exports.logReturn = logReturn;
 
   var _underscore2 = _interopRequireDefault(_underscore);
@@ -28,6 +28,8 @@
   var _lodash4 = _interopRequireDefault(_lodash3);
 
   var _lodash6 = _interopRequireDefault(_lodash5);
+
+  var _lodash8 = _interopRequireDefault(_lodash7);
 
   var _jsondiffpatch2 = _interopRequireDefault(_jsondiffpatch);
 
@@ -165,6 +167,7 @@
   });
 
   var recorder = rx._recorder;
+  var IS_PROXY_SYM = exports.IS_PROXY_SYM = Symbol('is_proxy');
 
   var patchHas = exports.patchHas = function patchHas(patch, path) {
     var diffArray = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
@@ -233,7 +236,9 @@
         // the default mutation warning is nowhere near dire enough. mutating nested objects within a
         // bind is extremely likely to lead to infinite loops.
         console.warn('Warning: deleting nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-        _this.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: _this._base });
+        _this.onUnsafeMutation.pub({ op: 'delete', path: path, obj: obj, prop: prop, base: rx.snap(function () {
+            return _this.data;
+          }) });
       }
       recorder.mutating(function () {
         var old = obj[prop];
@@ -256,7 +261,9 @@
         // the default mutation warning is nowhere near dire enough. mutating nested objects within a
         // bind is extremely likely to lead to infinite loops.
         console.warn('Warning: updating nested element at ' + path.join('.') + ' from within a bind context. Affected object:', obj);
-        _this2.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: _this2._base });
+        _this2.onUnsafeMutation.pub({ op: 'set', path: path, obj: obj, prop: prop, val: val, base: rx.snap(function () {
+            return _this2.data;
+          }) });
       }
       recorder.mutating(function () {
         var old = rx.snap(function () {
@@ -274,13 +281,16 @@
 
   function _getProperty(getPath, basePath, obj, prop) {
     var val = obj[prop];
+    if (prop === 'IS_PROXY_SYM') {
+      return true;
+    }
     if (prop === '__proto__' || _underscore2.default.isFunction(obj[prop])) {
       return obj[prop];
     }
     this.subscribeProperty(getPath, obj, prop);
     // return new Proxy(deepGet(this._base, path), this.conf(path, obj));
     if (_underscore2.default.isObject(val)) {
-      return new Proxy(val, this.conf(getPath(prop), obj));
+      return new Proxy(val, this.conf(getPath(prop)));
     }
     return val;
   }
@@ -293,26 +303,28 @@
 
       var _this3 = _possibleConstructorReturn(this, (ObsJsonCell.__proto__ || Object.getPrototypeOf(ObsJsonCell)).call(this));
 
-      _this3._base = _base;
       _this3.onChange = _this3._mkEv(function () {
-        return jsondiffpatch.diff({}, _this3._base);
+        return jsondiffpatch.diff({}, _base);
       });
       _this3.onUnsafeMutation = _this3._mkEv(function () {});
-      _this3._updating(function () {
-        return _this3._data = new Proxy({ value: _this3._base }, _this3.conf([], null));
-      });
+      _this3._base = { value: _base };
       return _this3;
     }
 
     _createClass(ObsJsonCell, [{
+      key: '_proxify',
+      value: function _proxify() {
+        return new Proxy(this._base, this.conf([]));
+      }
+    }, {
       key: '_updating',
       value: function _updating(f) {
-        this._oldUpdating = this._nowUpdating || false;
+        var _oldUpdating = this._nowUpdating || false;
         this._nowUpdating = true;
         try {
           rx.snap(f);
         } finally {
-          this._nowUpdating = this._oldUpdating;
+          this._nowUpdating = _oldUpdating;
         }
         return true;
       }
@@ -322,8 +334,8 @@
         var _this4 = this;
 
         this._updating(function () {
-          var diff = jsondiffpatch.diff(_this4._data, { value: newVal });
-          jsondiffpatch.patch(_this4._data, diff);
+          var diff = jsondiffpatch.diff(_this4._base, { value: newVal });
+          jsondiffpatch.patch(_this4._proxify(), diff);
         });
         return true;
       }
@@ -331,6 +343,11 @@
       key: 'all',
       value: function all() {
         return this.data;
+      }
+    }, {
+      key: 'cloneRaw',
+      value: function cloneRaw() {
+        return (0, _lodash8.default)(this._base.value);
       }
     }, {
       key: 'readonly',
@@ -392,7 +409,9 @@
         if (prop === 'length' && _underscore2.default.isArray(obj)) {
           var oldVal = obj.length;
           recorder.sub(this.onChange, function () {
-            var newVal = (0, _lodash2.default)(_this9._base, path.slice(1)); // necessary because of wrapping in value field
+            var newVal = rx.snap(function () {
+              return (0, _lodash2.default)(_this9._base, path);
+            }); // necessary because of wrapping in value field
             if (newVal !== oldVal) {
               oldVal = newVal;
               return true;
@@ -441,7 +460,7 @@
           set: this.mkSetProperty(getPath, basePath),
           get: this.mkGetProperty(getPath, basePath),
           has: function has(obj, prop) {
-            var path = getPath(prop).slice(1); // necessary because we wrap within the value field.
+            var path = getPath(prop); // necessary because we wrap within the value field.
             var had = prop in obj;
             recorder.sub(_this10.onChange, function (patch) {
               var has = (0, _lodash6.default)(_this10._base, path);
@@ -474,7 +493,7 @@
     }, {
       key: 'data',
       get: function get() {
-        return this._data.value;
+        return this._proxify().value;
       }
     }]);
 
@@ -532,7 +551,9 @@
   var SrcJsonCell = exports.SrcJsonCell = function (_ObsJsonCell2) {
     _inherits(SrcJsonCell, _ObsJsonCell2);
 
-    function SrcJsonCell(init) {
+    function SrcJsonCell() {
+      var init = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
       _classCallCheck(this, SrcJsonCell);
 
       return _possibleConstructorReturn(this, (SrcJsonCell.__proto__ || Object.getPrototypeOf(SrcJsonCell)).call(this, init));
@@ -549,7 +570,7 @@
         this._update(val);
       },
       get: function get() {
-        return this._data.value;
+        return this._proxify().value;
       }
     }]);
 

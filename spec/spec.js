@@ -3,7 +3,7 @@ import _ from 'underscore';
 import * as rx from 'bobtail-rx';
 import * as jsonRx from '../src/main.js';
 let {snap, bind} = rx;
-let {DepMutationError, DepJsonCell, SrcJsonCell, jsonCell} = jsonRx;
+let {IS_PROXY_SYM, DepMutationError, DepJsonCell, SrcJsonCell, jsonCell} = jsonRx;
 import deepGet from 'lodash.get';
 
 jasmine.CATCH_EXCEPTIONS = false;
@@ -15,7 +15,6 @@ describe('get', () => {
       e: 3,
       f: {x: {y: 42, z: ['e', 'b', 'r', 'a']}}
     });
-    console.info(foo);
     let zebra = bind(() => {
       let suffix = deepGet(foo, 'f.x.z');
       return suffix ? 'z' + suffix.join('') : undefined;
@@ -173,5 +172,55 @@ describe('arrays', () => {
     expect(dep.raw()).toEqual([2,3,4]);
     src.data.splice(0,0,1);
     expect(dep.raw()).toEqual([1,2,3,4]);
-  })
+  });
+});
+
+describe('cloneRaw', () => {
+  it('should not return a Proxy', () => {
+    expect(new SrcJsonCell({}).raw()[IS_PROXY_SYM]).toBeUndefined()
+  });
+  it('should not return a reactive object', () => {
+    let cell = new SrcJsonCell({a: 1, b: {c: 2}});
+    let x = cell.cloneRaw();
+    let y = rx.bind(() => x);
+    cell.data.a = 2;
+    cell.data.b.c = 3;
+    expect(y.raw()).toEqual({a: 1, b: {c: 2}});
+  });
+  it('should not return an object whose mutations will affect its source', () => {
+    let cell = new SrcJsonCell({a: 1, b: {c: 2}});
+    let x = cell.cloneRaw();
+    x.a = 2;
+    expect(rx.snap(() => cell.data.a)).toBe(1);
+  });
+  it('should return a clone of its parent object', () => {
+    let cell = new SrcJsonCell({a: 1, b: {c: 2}});
+    let x = cell.cloneRaw();
+    expect(rx.snap(() => _.isEqual(x, cell.data))).toBe(true);
+    expect(rx.snap(() => x === cell.data)).toBe(false);
+  });
+});
+
+describe('multiple proxies', () => {
+  // cell.data returns a new Proxy every time, so make sure that this doesn't break reactivity.
+  it('Cells dependent on different proxies from the same object should update whenever the object changes', () => {
+    let cell = new SrcJsonCell({a: 1});
+    let x = cell.data;
+    let y = cell.data;
+    let xCell = bind(() => x.a);
+    let yCell = bind(() => y.a);
+    x.a = 2;
+    expect(xCell.raw()).toBe(2);
+    expect(yCell.raw()).toBe(2);
+  });
+});
+
+describe('nullification', () => {
+  it("should work even after being reset to null", () => {
+    // This previously caused breakages due to reliance on the old _base attribute.
+    // let's make sure it doesn't sneak in again.
+    let x = new SrcJsonCell(null);
+    x.data = [1, 2, 3, 4];
+    expect(bind(() => x.data.map(_.identity)).raw()).toEqual([1, 2, 3, 4]);
+  });
 });
