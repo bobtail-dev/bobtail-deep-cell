@@ -258,6 +258,9 @@ export class ObsJsonCell extends rx.ObsBase {
       }
     }
   }
+  snapGet(path) {
+    return rx.snap(() => deepGet(this.data, path));
+  }
 }
 
 export class DepMutationError extends Error {

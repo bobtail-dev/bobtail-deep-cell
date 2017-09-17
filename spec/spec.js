@@ -215,12 +215,37 @@ describe('multiple proxies', () => {
   });
 });
 
-describe('nullification', () => {
+describe('nullified cells', () => {
   it("should work even after being reset to null", () => {
     // This previously caused breakages due to reliance on the old _base attribute.
     // let's make sure it doesn't sneak in again.
     let x = new SrcJsonCell(null);
     x.data = [1, 2, 3, 4];
     expect(bind(() => x.data.map(_.identity)).raw()).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('snapGet', () => {
+  it("Should not subscribe dependencies", () => {
+    let cell = new SrcJsonCell({a: {b: 1, c: 2}, d: 3});
+    let x = bind(() => cell.snapGet('a.b'));
+    expect(x.raw()).toBe(1);
+    cell.data.a.b = 2;
+    expect(x.raw()).toBe(1); // should not update
+  });
+  it("sub properties should subscribe dependencies", () => {
+    let cell = new SrcJsonCell({a: {b: {c: 2, d: 3}}, e: 1});
+    let x = bind(() => cell.snapGet('a.b').c);
+    let spy = jasmine.createSpy('listener');
+    rx.autoSub(x.onSet, rx.skipFirst(spy));
+    expect(x.raw()).toBe(2);
+    cell.data.a.b.d = 4;
+    expect(spy).not.toHaveBeenCalled();
+    cell.data.a.b.c = 3;
+    expect(x.raw()).toBe(3);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+  it("", () => {
+
   });
 });

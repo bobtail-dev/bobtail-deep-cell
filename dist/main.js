@@ -491,6 +491,15 @@
         };
       }
     }, {
+      key: 'snapGet',
+      value: function snapGet(path) {
+        var _this11 = this;
+
+        return rx.snap(function () {
+          return (0, _lodash2.default)(_this11.data, path);
+        });
+      }
+    }, {
       key: 'data',
       get: function get() {
         return this._proxify().value;
@@ -513,10 +522,10 @@
         args[_key2] = arguments[_key2];
       }
 
-      var _this11 = _possibleConstructorReturn(this, (_ref2 = DepMutationError.__proto__ || Object.getPrototypeOf(DepMutationError)).call.apply(_ref2, [this].concat(args)));
+      var _this12 = _possibleConstructorReturn(this, (_ref2 = DepMutationError.__proto__ || Object.getPrototypeOf(DepMutationError)).call.apply(_ref2, [this].concat(args)));
 
-      Error.captureStackTrace(_this11, DepMutationError);
-      return _this11;
+      Error.captureStackTrace(_this12, DepMutationError);
+      return _this12;
     }
 
     return DepMutationError;
@@ -530,19 +539,19 @@
 
       _classCallCheck(this, DepJsonCell);
 
-      var _this12 = _possibleConstructorReturn(this, (DepJsonCell.__proto__ || Object.getPrototypeOf(DepJsonCell)).call(this, init));
+      var _this13 = _possibleConstructorReturn(this, (DepJsonCell.__proto__ || Object.getPrototypeOf(DepJsonCell)).call(this, init));
 
-      _this12.f = f;
-      var c = rx.bind(_this12.f);
+      _this13.f = f;
+      var c = rx.bind(_this13.f);
       rx.autoSub(c.onSet, function (_ref3) {
         var _ref4 = _slicedToArray(_ref3, 2),
             o = _ref4[0],
             n = _ref4[1];
 
-        return _this12._update(n);
+        return _this13._update(n);
       });
-      _this12._makeReadOnly();
-      return _this12;
+      _this13._makeReadOnly();
+      return _this13;
     }
 
     return DepJsonCell;
